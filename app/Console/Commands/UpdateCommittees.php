@@ -5,9 +5,11 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use League\OAuth2\Client\Provider\GenericProvider;
 use Kreait\Firebase\Firestore;
+use App\Helpers\AzureHelpers;
 
 class UpdateCommittees extends Command
 {
+    use AzureHelpers;
     /**
      * The name and signature of the console command.
      *
@@ -40,30 +42,8 @@ class UpdateCommittees extends Command
      */
     public function handle()
     {
-        $oauthClient = $this->createOAuthClient();
 
-        // Get an client credentials access token from Azure
-        $accessToken = $oauthClient->getAccessToken('client_credentials', [
-            'scope' => 'https://graph.microsoft.com/.default',
-        ]);
-
-
-        // Do a request to Azure to get a list of all committees
-        $request = $oauthClient->getAuthenticatedRequest(
-            'GET',
-            'https://graph.microsoft.com/v1.0/groups/' . env('AD_PARENT_COMMITTEE_GROUP') . '/members?$select=id,displayName,description,mail',
-            $accessToken,
-        );
-
-        // Parse the response
-        $response = $oauthClient->getParsedResponse($request);
-        
-        // The committees from Azure
-        $azCommittees = $response['value'];
-        // Filter out the items which don't have a displayName (They're also included and are weird and empty)
-        $azCommittees = array_filter($azCommittees, function($item) {
-            return $item['displayName'] != null;
-        });
+        $azCommittees = $this->getAllCommittees();
 
         // Firebase
         $database = $this->firestore->database();

@@ -6,9 +6,14 @@ use Illuminate\Http\Request;
 use League\OAuth2\Client\Provider\GenericProvider;
 use Kreait\Firebase\Auth;
 use Kreait\Firebase\Firestore;
+use App\Helpers\AzureHelpers;
+use App\Helpers\FirebaseHelpers;
 
 class LoginController extends Controller
 {
+    use AzureHelpers;
+    use FirebaseHelpers;
+
     /**
      * Create a new controller instance.
      *
@@ -17,7 +22,6 @@ class LoginController extends Controller
     public function __construct(Auth $auth, Firestore $firestore) {
         $this->auth = $auth;
         $this->firestore = $firestore;
-        $this->middleware('guest');
     }
 
     /**
@@ -26,55 +30,38 @@ class LoginController extends Controller
      * @return \Illuminate\Contracts\Support\Renderable
      */
     public function index() {
-        $oauthClient = $this->createOAuthClient();
         return view('login')->with([
-            'loginUrl' => $oauthClient->getAuthorizationUrl()
+            'loginUrl' => $this->getAuthorizationUrl()
         ]);
     }
-    
+
     public function callback(Request $request) {
         $code = $request->query('code');
+
         if (!isset($code)) {
-            return view('login')->with('error', 'Something went wrong');
+            return view('callback')->with([
+                'error' => 'Invalid code!'
+            ]);
         }
 
-        $oauthClient = $this->createOAuthClient();
+        try {
+            // Get an user object from the code
+            $user = $this->getUserFromCode($code);
+            // Store the user object in firebase
+            $this->putUserToFirebase($this->firestore, $user);
+            // Generate a firebase auth key
+            $key = $this->generateKeyFromUser($this->auth, $user);
 
-        $accessToken = $oauthClient->getAccessToken('authorization_code', [
-            'code' => $code,
-        ]);
+            // Return to login with the new auth code to login to firebase
+            return view('callback')->with([
+                'authCode' => $key
+            ]);
+        } catch(\Exception $e) {
+            throw $e;
+            return view('callback')->with([
+                'error' => 'Invalid code! ' . $e->getMessage()
+            ]);
+        }
 
-        // Info about the user itself
-        $meRequest = $oauthClient->getAuthenticatedRequest(
-            'GET',
-            'https://graph.microsoft.com/v1.0/me',
-            $accessToken
-        );
-        $meResponse = $oauthClient->getParsedResponse($meRequest);
-
-        // Info about the committees the user is part of
-        $committeesRequest = $oauthClient->getAuthenticatedRequest(
-            'POST',
-            'https://graph.microsoft.com/v1.0/users/' . $meResponse['id'] . '/getMemberGroups',
-            $accessToken,
-            [
-                'headers' => ['Content-type' => 'application/json'],
-                'body' => '{ "securityEnabledOnly": true }',
-            ]
-            );
-        $committeesResponse = $oauthClient->getParsedResponse($committeesRequest);
-
-        return '<pre>'.var_export(array($accessToken, $meResponse, $committeesResponse)).'</pre>';
-    }
-
-    private function createOAuthClient(): GenericProvider {
-        return new GenericProvider([
-            'clientId'                => env('OAUTH_APP_ID'),
-            'redirectUri'             => env('OAUTH_REDIRECT_URI'),
-            'urlAuthorize'            => env('OAUTH_AUTHORIZE_ENDPOINT'),
-            'urlAccessToken'          => env('OAUTH_TOKEN_ENDPOINT'),
-            'urlResourceOwnerDetails' => 'https://graph.microsoft.com/v1.0/me',
-            'scopes'                   => env('OAUTH_SCOPES'),
-          ]);
     }
 }

@@ -12,7 +12,6 @@ trait FirebaseHelpers {
     function putUserToFirebase($firestore, User $user) {
 
         $data = [
-            'id' => $user->id,
             'name' => $user->name,
             'memberNumber' => $user->memberNumber,
             'committees' => $user->committees,

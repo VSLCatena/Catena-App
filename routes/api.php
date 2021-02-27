@@ -14,4 +14,5 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::get('/login-key', [App\Http\Controllers\Api\ApiKeyController::class, 'callback'])->name('getApiKey');
+Route::get('/login', [App\Http\Controllers\Api\ApiLoginController::class, 'login'])->name('apiCallback');
+Route::get('/callback', [App\Http\Controllers\Api\ApiLoginController::class, 'callback'])->name('apiLogin');

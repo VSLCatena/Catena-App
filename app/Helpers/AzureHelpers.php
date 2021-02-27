@@ -3,19 +3,22 @@ namespace App\Helpers;
 
 use League\OAuth2\Client\Provider\GenericProvider;
 use App\Models\User;
+use Illuminate\Support\Facades\Log;
 
 trait AzureHelpers {
 
-    function getAuthorizationUrl(): String {
-        return $this->createOAuthClient()->getAuthorizationUrl();
+    /** Creates an authorization url */
+    function getAuthorizationUrl($asApi = false): String {
+        return $this->createOAuthClient(false, $asApi)->getAuthorizationUrl();
     }
 
     /**
      * Gets a user object from an OAuth code.
      */
-    function getUserFromCode($code) {
-        $oauthClient = $this->createOAuthClient();
+    function getUserFromCode($code, $asApi = false) {
+        $oauthClient = $this->createOAuthClient(false, $asApi);
 
+        // Get an accessToken from the code we received
         $accessToken = $oauthClient->getAccessToken('authorization_code', [
             'code' => $code,
         ]);
@@ -40,10 +43,13 @@ trait AzureHelpers {
         // This is because it will also return stuff like member groups
         $userCommittees = $this->getValidCommittees($memberGroupsResponse);
         // Map them to just their id's 
-        $userCommitteeIds = array_map(function($committee) {
-            return $committee['id'];
-        }, $userCommittees);
+        $userCommitteeIds = array_values(
+            array_map(function($committee) {
+                return $committee['id'];
+            }, $userCommittees)
+        );
 
+        // Create and return the user
         return new User(
             $meResponse->getId(),
             $meArray['displayName'],
@@ -101,10 +107,10 @@ trait AzureHelpers {
      * 
      * Secret is only used for OAuth calls that are called on behalf of the server, not the user.
      */
-    private function createOAuthClient($withSecret = false): GenericProvider {
+    private function createOAuthClient($withSecret = false, $asApi = false): GenericProvider {
         $options = [
             'clientId'                => env('OAUTH_APP_ID'),
-            'redirectUri'             => env('OAUTH_REDIRECT_URI'),
+            'redirectUri'             => $asApi ? env('OAUTH_API_REDIRECT_URI') : env('OAUTH_REDIRECT_URI'),
             'urlAuthorize'            => env('OAUTH_AUTHORIZE_ENDPOINT'),
             'urlAccessToken'          => env('OAUTH_TOKEN_ENDPOINT'),
             'urlResourceOwnerDetails' => 'https://graph.microsoft.com/v1.0/me',
